@@ -20,14 +20,13 @@ build/
 # Node
 node_modules/
 .npm
-package-lock.json
-yarn.lock
 
 # Frontend builds
 frontend/.next/
 frontend/out/
 frontend/.env.local
 frontend/.env.*.local
+*.tsbuildinfo
 
 # Backend data (local registry)
 backend/data/*.json

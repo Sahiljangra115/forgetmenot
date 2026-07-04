@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      # Load environment variables from host .env
+      - COGNEE_API_KEY=${COGNEE_API_KEY}
+      - COGNEE_BASE_URL=${COGNEE_BASE_URL}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - SUMMARY_MODEL=${SUMMARY_MODEL}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+    volumes:
+      - ./backend/data:/app/backend/data
+    restart: unless-stopped
