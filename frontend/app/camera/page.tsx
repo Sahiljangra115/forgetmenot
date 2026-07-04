@@ -94,6 +94,7 @@ export default function CameraPage() {
   const [llmProvider, setLlmProvider] = useState<"openai" | "anthropic" | "ollama" | "openrouter" | "deepseek" | "google">("openai");
   const [llmApiKey, setLlmApiKey] = useState("");
   const [llmModel, setLlmModel] = useState("");
+  const [llmBaseUrl, setLlmBaseUrl] = useState("");
 
   // Input states
   const [enName, setEnName] = useState("");
@@ -491,6 +492,7 @@ export default function CameraPage() {
             if (cfg.provider) setLlmProvider(cfg.provider);
             if (cfg.api_key) setLlmApiKey(cfg.api_key);
             if (cfg.model) setLlmModel(cfg.model);
+            if (cfg.base_url) setLlmBaseUrl(cfg.base_url);
           })
           .catch(() => {});
       })
@@ -1335,6 +1337,27 @@ export default function CameraPage() {
                   </div>
                 )}
 
+                {/* Ollama Base URL Input */}
+                {llmProvider === "ollama" && (
+                  <div className="flex flex-col gap-3 border-t border-foreground/5 pt-4">
+                    <div className="flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-white/60" />
+                      <h3 className="font-mono text-xs uppercase tracking-wider text-white">Ollama Base URL</h3>
+                    </div>
+
+                    <Input
+                      type="text"
+                      placeholder="http://localhost:11434/v1"
+                      value={llmBaseUrl}
+                      onChange={(e) => setLlmBaseUrl(e.target.value)}
+                      className="bg-black/30 border border-foreground/10 rounded-xl text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-foreground/30"
+                    />
+                    <p className="text-[10px] font-sans text-muted-foreground leading-normal font-light">
+                      Must be reachable from the backend server, not just your browser (e.g. use local IP or a tunnel if the server is remote).
+                    </p>
+                  </div>
+                )}
+
                 {/* Model Selection */}
                 <div className="flex flex-col gap-3 border-t border-foreground/5 pt-4">
                   <div className="flex items-center gap-2">
@@ -1372,6 +1395,7 @@ export default function CameraPage() {
                         provider: llmProvider,
                         api_key: llmApiKey,
                         model: llmModel,
+                        base_url: llmBaseUrl,
                       }),
                     })
                       .then((r) => r.json())

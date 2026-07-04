@@ -185,7 +185,7 @@ _key_bytes = hashlib.sha256(_secret.encode()).digest()
 _fernet_key = base64.urlsafe_b64encode(_key_bytes)
 _cipher = Fernet(_fernet_key)
 
-def save_llm_config(user_id: str, provider: str, api_key: str, model: str) -> None:
+def save_llm_config(user_id: str, provider: str, api_key: str, model: str, base_url: str = "") -> None:
     encrypted_key = ""
     if api_key:
         encrypted_key = _cipher.encrypt(api_key.encode()).decode()
@@ -194,7 +194,8 @@ def save_llm_config(user_id: str, provider: str, api_key: str, model: str) -> No
             _state["users"][user_id]["llm_config"] = {
                 "provider": provider,
                 "api_key_encrypted": encrypted_key,
-                "model": model
+                "model": model,
+                "base_url": base_url
             }
             _save()
 
@@ -213,7 +214,8 @@ def get_llm_config(user_id: str) -> dict | None:
     return {
         "provider": cfg.get("provider", "openai"),
         "api_key": decrypted_key,
-        "model": cfg.get("model", "gpt-4o-mini")
+        "model": cfg.get("model", "gpt-4o-mini"),
+        "base_url": cfg.get("base_url", "")
     }
 
 

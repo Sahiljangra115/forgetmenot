@@ -115,3 +115,95 @@ writing it down.
    `/api/auth/status` or similar) and bounces unauthenticated direct visits
    back to `/login`, so this isn't just a UI-level redirect that a direct
    URL visit can skip.
+
+---
+
+## 4. "Try Demo" still lands on camera page directly (reported again after fix) [COMPLETED]
+
+### Current state (verified in source, contradicts the report)
+
+- `frontend/components/landing/navigation.tsx` line ~76 and ~146 already
+  read `<Link href="/login?redirect=/camera">`, both desktop and mobile
+  buttons. Source code is correct.
+- User's screenshot shows landing straight on the camera dashboard
+  (`connecting...` state), not the login page.
+
+### Likely root cause: stale static export, not stale source
+
+- `frontend/out` (the exported static site FastAPI actually serves, see
+  `backend/main.py`'s catch-all static route) is a build artifact, it does
+  not auto-update when `.tsx` source changes. If the deployed backend is
+  serving an `frontend/out` built **before** the `/login?redirect=/camera`
+  fix landed, it will still ship the old `/camera` link, no matter what
+  the source says now.
+- Alternative/parallel cause: an already-valid session cookie. If the user
+  was logged in from an earlier session, `Try Demo` -> `/login` ->
+  immediate redirect to `/camera` happens so fast it looks like it "skipped"
+  login. Worth distinguishing from the stale-build cause before assuming
+  code is broken.
+
+### Task
+
+1. Rebuild the frontend: `cd frontend && npm run build` (regenerates
+   `frontend/out` from current source).
+2. Redeploy (or restart the local `uvicorn` process) so it serves the
+   fresh `frontend/out`, confirm via browser hard-refresh
+   (cache-bypass) that `Try Demo` now hits `/login` first when logged out.
+3. Separately, verify the "connecting..." stuck state in the screenshot:
+   check that the WebSocket URL the camera page opens (`/ws`) resolves to
+   the same host the page was loaded from (already fixed for HTTP calls
+   via `window.location.hostname` per `DEPLOYMENT_GUIDE.md`, confirm the
+   WebSocket construction uses the same pattern, not a hardcoded
+   `localhost:8000`).
+4. Test both logged-out (`Try Demo` -> should hit `/login`) and logged-in
+   (`Try Demo` -> should skip straight to `/camera`, that's correct
+   behavior, not a bug) to avoid re-reporting expected behavior as broken.
+
+---
+
+## 5. Make Ollama base URL editable in the LLM settings panel [COMPLETED]
+
+### Current state (verified in `frontend/app/camera` LLM settings UI +
+`backend/llm.py`)
+
+- The provider dropdown includes `Ollama (Local)` (~line 1309 in the
+  camera page component), but there's no field for the Ollama server's
+  base URL anywhere in the UI, only provider + API key + model.
+- Backend hardcodes it: `backend/llm.py` `_get_base_url()` returns
+  `os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")` when
+  provider is `ollama`. This only works if Ollama is running on the same
+  machine as the backend, on the default port. Breaks for:
+  - Any user whose laptop runs Ollama but the backend is deployed remotely
+    (Render/Fly), `localhost:11434` on the server means the server itself,
+    not the user's laptop.
+  - Anyone running Ollama on a non-default port or a LAN address.
+- This is almost certainly why the demo "assumed Ollama" and failed to
+  connect: the deployed backend has no route back to a laptop's local
+  Ollama instance, `localhost` from the server's perspective is the server.
+
+### Task
+
+1. Add an "Ollama Base URL" text input to the LLM settings panel, shown
+   only when `llmProvider === "ollama"` (same conditional pattern already
+   used to hide/show the API key field for Ollama at ~line 1318).
+   Default placeholder: `http://localhost:11434/v1`, editable.
+   Note: since the backend, not the browser, makes the Ollama call, a
+   remotely-deployed backend can never reach a `localhost` on the *user's*
+   machine. The base URL field only works end-to-end when backend and
+   Ollama are on the same host/network, or the user provides a
+   network-reachable Ollama URL (e.g. `http://192.168.x.x:11434/v1`,
+   or an ngrok/tunnel URL), that's a networking fact, not a bug, but the
+   UI should say so briefly (e.g. helper text: "Must be reachable from the
+   server, not just your browser").
+2. Include this `base_url` value in the `POST /api/llm/config` request
+   body alongside `provider`, `api_key`, `model`.
+3. Backend: extend `auth.save_llm_config` / `get_llm_config` (added for
+   task 2) to store and return a per-user `base_url` field, defaulting to
+   `os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")` if unset.
+4. `backend/llm.py`'s `_get_base_url(user_id)` should read the per-user
+   stored `base_url` when provider is `ollama`, instead of only the
+   process-wide `OLLAMA_BASE_URL` env var, so two different users on the
+   same deployed backend can each point at their own Ollama instance.
+5. Same masking/no-op treatment isn't needed for base_url (it's not a
+   secret), unlike the API key field, always show and allow editing it
+   directly.

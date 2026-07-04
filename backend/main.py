@@ -417,6 +417,7 @@ async def llm_config(body: dict, request: Request):
         provider = body.get("provider", "openai")
         api_key = body.get("api_key", "")
         model = body.get("model", "gpt-4o-mini")
+        base_url = body.get("base_url", "")
         
         valid_providers = ["openai", "anthropic", "ollama", "openrouter", "deepseek", "google"]
         if provider not in valid_providers:
@@ -436,7 +437,7 @@ async def llm_config(body: dict, request: Request):
         if not model:
             return JSONResponse({"error": "Model name is required"}, status_code=400)
         
-        llm.set_config(user["id"], provider, api_key, model)
+        llm.set_config(user["id"], provider, api_key, model, base_url)
         
         return {"success": True, "message": f"LLM configured to use {provider} with model {model}"}
     except Exception as e:
@@ -456,7 +457,8 @@ async def get_llm_config_endpoint(request: Request):
         provider = os.getenv("LLM_PROVIDER", "openai")
         api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or ""
         model = os.getenv("SUMMARY_MODEL", "gpt-4o-mini")
-        cfg = {"provider": provider, "api_key": api_key, "model": model}
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+        cfg = {"provider": provider, "api_key": api_key, "model": model, "base_url": base_url}
         
     key = cfg.get("api_key", "")
     masked_key = ""
@@ -470,6 +472,7 @@ async def get_llm_config_endpoint(request: Request):
         "provider": cfg.get("provider", "openai"),
         "model": cfg.get("model", "gpt-4o-mini"),
         "api_key": masked_key,
+        "base_url": cfg.get("base_url", ""),
         "is_configured": bool(key)
     }
 

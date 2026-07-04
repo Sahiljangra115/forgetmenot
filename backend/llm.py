@@ -20,15 +20,15 @@ _DEFAULT_CONFIG = {
 _clients: dict[tuple, object] = {}
 
 
-def set_config(user_id: str | None, provider: str, api_key: str, model: str):
+def set_config(user_id: str | None, provider: str, api_key: str, model: str, base_url: str = ""):
     """Update LLM configuration for one user, saved to persistent auth store."""
     import auth
-    auth.save_llm_config(user_id, provider, api_key, model)
+    auth.save_llm_config(user_id, provider, api_key, model, base_url)
     # Clear client cache entries for this user
     for k in list(_clients.keys()):
         if k[0] == user_id:
             _clients.pop(k, None)
-    print(f"[llm] config updated persistently for user={user_id}: provider={provider}, model={model}")
+    print(f"[llm] config updated persistently for user={user_id}: provider={provider}, model={model}, base_url={base_url}")
 
 
 def _config_for(user_id: str | None) -> dict:
@@ -42,9 +42,13 @@ def _config_for(user_id: str | None) -> dict:
 
 def _get_base_url(user_id: str | None) -> str | None:
     """Get base URL for OpenAI-compatible servers."""
-    provider = _config_for(user_id).get("provider", "openai")
+    config = _config_for(user_id)
+    provider = config.get("provider", "openai")
 
     if provider == "ollama":
+        stored_url = config.get("base_url", "")
+        if stored_url:
+            return stored_url
         return os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
     elif provider == "openrouter":
         return "https://openrouter.ai/api/v1"
