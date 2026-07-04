@@ -6,27 +6,16 @@
 <title>ForgetMeNot: building a memory prosthetic on Cognee</title>
 <style>
   :root {
-    --bg:      oklch(98% 0.004 95);
-    --surface: oklch(100% 0.002 95);
-    --fg:      oklch(20% 0.018 70);
-    --muted:   oklch(48% 0.012 70);
-    --border:  oklch(90% 0.006 95);
-    --accent:  oklch(52% 0.10 28);
-    --code-bg: oklch(96% 0.005 95);
+    --bg:      oklch(0.06 0.008 260);
+    --surface: oklch(0.09 0.008 260);
+    --fg:      oklch(0.94 0.005 90);
+    --muted:   oklch(0.55 0.015 90);
+    --border:  oklch(0.18 0.008 260);
+    --accent:  oklch(0.94 0.005 90);
+    --code-bg: oklch(0.12 0.008 260);
     --font-display: 'Iowan Old Style', 'Charter', Georgia, serif;
     --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg:      oklch(19% 0.01 70);
-      --surface: oklch(23% 0.01 70);
-      --fg:      oklch(92% 0.008 95);
-      --muted:   oklch(66% 0.01 90);
-      --border:  oklch(32% 0.01 70);
-      --accent:  oklch(70% 0.11 40);
-      --code-bg: oklch(24% 0.01 70);
-    }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -247,7 +236,7 @@
 </div>
 
 <div class="hero" data-od-id="hero">
-  <img src="assets/landing-top.jpeg" alt="ForgetMeNot landing page showing the live recognition view with a reminder card anchored to a recognized face">
+  <img src="/blog/assets/landing-top.jpeg" alt="ForgetMeNot landing page showing the live recognition view with a reminder card anchored to a recognized face">
   <p class="cap">The live view. Recognition runs in the browser; the one-line reminder comes back from Cognee through the recall loop described below.</p>
 </div>
 
@@ -473,7 +462,7 @@
     </ul>
 
     <figure class="wide" data-od-id="mid-shot">
-      <img src="assets/landing-mid.jpeg" alt="ForgetMeNot product view showing enrollment, notes, and the memory operations panel">
+      <img src="/blog/assets/landing-mid.jpeg" alt="ForgetMeNot product view showing enrollment, notes, and the memory operations panel">
       <figcaption>Enrollment and notes on the left, the memory-ops panel streaming Cognee calls on the right. The status pill above it reports cloud, local, or fallback mode.</figcaption>
     </figure>
   </section>
@@ -536,32 +525,6 @@
   </div>
 
 </article>
-
-<div class="related" data-od-id="related">
-  <div class="related-inner">
-    <h4>Related posts</h4>
-    <div class="cards">
-      <a class="card" href="#top">
-        <div class="thumb"></div>
-        <p class="t">Running face-api.js at 2 fps without melting a laptop</p>
-        <p class="x">Detection loop budgeting, descriptor batching, and why we stopped at 2 frames per second.</p>
-        <p class="d">Coming soon</p>
-      </a>
-      <a class="card" href="#top">
-        <div class="thumb"></div>
-        <p class="t">One Docker image, whole product: FastAPI serving a Next.js export</p>
-        <p class="x">The single-service Render deployment, and the tradeoffs versus splitting frontend and backend.</p>
-        <p class="d">Coming soon</p>
-      </a>
-      <a class="card" href="#top">
-        <div class="thumb"></div>
-        <p class="t">Designing forget(): deletion as a product feature</p>
-        <p class="x">What "we deleted your data" should actually mean, and how per-person datasets make it checkable.</p>
-        <p class="d">Coming soon</p>
-      </a>
-    </div>
-  </div>
-</div>
 
 </body>
 </html>
