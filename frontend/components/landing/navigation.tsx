@@ -72,7 +72,7 @@ export function Navigation() {
             <Link href="/login" className={`transition-all duration-500 ${isScrolled ? "text-xs text-foreground/70 hover:text-foreground" : "text-sm text-white/70 hover:text-white"}`}>
               Log in
             </Link>
-            <Link href="/camera">
+            <Link href="/login?redirect=/camera">
               <Button
                 size="sm"
                 className={`rounded-full transition-all duration-500 ${isScrolled ? "bg-foreground hover:bg-foreground/90 text-background px-4 h-8 text-xs" : "bg-white hover:bg-white/90 text-black px-6"}`}
@@ -143,7 +143,7 @@ export function Navigation() {
                 Log in
               </Button>
             </Link>
-            <Link href="/camera" className="flex-1">
+            <Link href="/login?redirect=/camera" className="flex-1">
               <Button 
                 className="w-full bg-foreground text-background rounded-full h-14 text-base"
                 onClick={() => setIsMobileMenuOpen(false)}

@@ -116,7 +116,7 @@ def _cached_reminder(pid: str) -> str | None:
     return None
 
 
-async def _recall_reminder(person: dict) -> str:
+async def _recall_reminder(person: dict, user_id: str | None = None) -> str:
     """Recall a person's memory into one reminder, cached for RECALL_TTL."""
     pid = person["id"]
     cached = _cached_reminder(pid)
@@ -124,7 +124,7 @@ async def _recall_reminder(person: dict) -> str:
         return cached
     query = f"What should I remember about {person['name']} my {person['relation']}?"
     snippets = await memory.recall(query, session_id=pid)
-    summary = await llm.one_liner(person, snippets)
+    summary = await llm.one_liner(person, snippets, user_id=user_id)
     _reminder_cache[pid] = (summary, time.time())
     return summary
 
@@ -169,17 +169,19 @@ async def note(body: NoteBody):
 
 
 @app.post("/api/transcribe")
-async def transcribe(person_id: str = Form(...), audio: UploadFile = File(...)):
+async def transcribe(request: Request, person_id: str = Form(...), audio: UploadFile = File(...)):
     """Transcribe a short clip and log it as an observation for person_id.
 
     No diarization: the whole clip is attributed to whoever is currently
     matched, which is the plan's explicit stand-in for speaker separation.
     """
+    user = _current_user(request)
+    user_id = user["id"] if user else None
     person = registry.get(person_id)
     if not person:
         return JSONResponse({"error": "unknown person"}, status_code=404)
     data = await audio.read()
-    text = await llm.transcribe(data, audio.filename or "clip.webm")
+    text = await llm.transcribe(data, audio.filename or "clip.webm", user_id=user_id)
     if not text:
         return JSONResponse(
             {"error": "transcription unavailable (no OPENAI_API_KEY, or empty audio)"},
@@ -191,13 +193,15 @@ async def transcribe(person_id: str = Form(...), audio: UploadFile = File(...)):
 
 
 @app.get("/api/conversation/summary")
-async def conversation_summary(person_id: str):
+async def conversation_summary(person_id: str, request: Request):
     """Short summary + bullets from a person's pending session notes, for the
     live 'view more details' card on the demo page."""
+    user = _current_user(request)
+    user_id = user["id"] if user else None
     person = registry.get(person_id)
     if not person:
         return JSONResponse({"error": "unknown person"}, status_code=404)
-    result = await llm.summarize_conversation(person, person.get("notes", []))
+    result = await llm.summarize_conversation(person, person.get("notes", []), user_id=user_id)
     return result
 
 
@@ -209,19 +213,21 @@ async def set_threshold(body: ThresholdBody):
 
 
 @app.post("/api/distill")
-async def distill(body: DistillBody):
+async def distill(body: DistillBody, request: Request):
     """Promote a person's raw session notes into one durable graph fact."""
+    user = _current_user(request)
+    user_id = user["id"] if user else None
     person = registry.get(body.person_id)
     if not person:
         return JSONResponse({"error": "unknown person"}, status_code=404)
-    fact = await llm.distill(person, person.get("notes", []))
+    fact = await llm.distill(person, person.get("notes", []), user_id=user_id)
     if not fact:
         return JSONResponse({"error": "no notes to distill"}, status_code=400)
     await memory.remember(fact, session_id=person["id"])
     await memory.improve(person["id"])
     registry.clear_notes(person["id"])
     _invalidate(person["id"])
-    summary = await _recall_reminder(person)
+    summary = await _recall_reminder(person, user_id=user_id)
     return {"ok": True, "distilled": fact, "reminder": summary}
 
 
@@ -244,6 +250,9 @@ async def ops():
 @app.websocket("/ws")
 async def ws(websocket: WebSocket):
     await websocket.accept()
+    token = websocket.cookies.get(auth.SESSION_COOKIE)
+    user = auth.resolve_session(token)
+    user_id = user["id"] if user else None
     try:
         while True:
             msg = await websocket.receive_json()
@@ -272,7 +281,7 @@ async def ws(websocket: WebSocket):
                 "distance": round(dist, 3),
             })
             if cached is None:
-                summary = await _recall_reminder(person)
+                summary = await _recall_reminder(person, user_id=user_id)
                 await websocket.send_json({"type": "summary", "person_id": pid, "summary": summary})
     except WebSocketDisconnect:
         return
@@ -413,18 +422,56 @@ async def llm_config(body: dict, request: Request):
         if provider not in valid_providers:
             return JSONResponse({"error": f"Invalid provider. Must be one of: {', '.join(valid_providers)}"}, status_code=400)
         
+        # Resolve masked key if user is keeping the existing key
+        existing_cfg = auth.get_llm_config(user["id"])
+        if api_key and "..." in api_key:
+            if existing_cfg and existing_cfg.get("api_key"):
+                api_key = existing_cfg["api_key"]
+            else:
+                api_key = ""
+
         if provider != "ollama" and not api_key:
             return JSONResponse({"error": f"API key required for {provider}"}, status_code=400)
         
         if not model:
             return JSONResponse({"error": "Model name is required"}, status_code=400)
         
-        llm.set_config(provider, api_key, model)
+        llm.set_config(user["id"], provider, api_key, model)
         
         return {"success": True, "message": f"LLM configured to use {provider} with model {model}"}
     except Exception as e:
         print(f"[llm] config error: {e}")
         return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.get("/api/llm/config")
+async def get_llm_config_endpoint(request: Request):
+    """Retrieve LLM provider configuration for the current user."""
+    user = _current_user(request)
+    if not user:
+        return JSONResponse({"error": "sign in first"}, status_code=401)
+    
+    cfg = auth.get_llm_config(user["id"])
+    if not cfg:
+        provider = os.getenv("LLM_PROVIDER", "openai")
+        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or ""
+        model = os.getenv("SUMMARY_MODEL", "gpt-4o-mini")
+        cfg = {"provider": provider, "api_key": api_key, "model": model}
+        
+    key = cfg.get("api_key", "")
+    masked_key = ""
+    if key:
+        if len(key) <= 8:
+            masked_key = "********"
+        else:
+            masked_key = f"{key[:4]}...{key[-4:]}"
+            
+    return {
+        "provider": cfg.get("provider", "openai"),
+        "model": cfg.get("model", "gpt-4o-mini"),
+        "api_key": masked_key,
+        "is_configured": bool(key)
+    }
 
 
 @app.get("/{file_path:path}")

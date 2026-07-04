@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Script from "next/script";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Camera,
@@ -67,6 +68,7 @@ interface LogEntry {
 }
 
 export default function CameraPage() {
+  const router = useRouter();
   const [modelsReady, setModelsReady] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [detecting, setDetecting] = useState(false);
@@ -470,10 +472,32 @@ export default function CameraPage() {
 
   // Initial startup hook
   useEffect(() => {
-    connectWS();
-    refreshStatus();
-    refreshPeople();
-    refreshOps();
+    // Verify auth status
+    fetch(`${getBackendUrl()}/api/auth/me`, { credentials: "include" })
+      .then((r) => {
+        if (!r.ok) throw new Error("Unauthenticated");
+        return r.json();
+      })
+      .then((data) => {
+        // Authenticated! Proceed with initializing services
+        connectWS();
+        refreshStatus();
+        refreshPeople();
+        refreshOps();
+
+        fetch(`${getBackendUrl()}/api/llm/config`, { credentials: "include" })
+          .then((res) => res.json())
+          .then((cfg) => {
+            if (cfg.provider) setLlmProvider(cfg.provider);
+            if (cfg.api_key) setLlmApiKey(cfg.api_key);
+            if (cfg.model) setLlmModel(cfg.model);
+          })
+          .catch(() => {});
+      })
+      .catch(() => {
+        toast.error("Please sign in first.");
+        router.push("/login?redirect=/camera");
+      });
 
     const statusInterval = setInterval(refreshStatus, 15000);
     const opsInterval = setInterval(refreshOps, 4000);
@@ -1343,6 +1367,7 @@ export default function CameraPage() {
                     fetch(`${getBackendUrl()}/api/llm/config`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
+                      credentials: "include",
                       body: JSON.stringify({
                         provider: llmProvider,
                         api_key: llmApiKey,

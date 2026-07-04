@@ -169,6 +169,47 @@ def public(user: dict) -> dict:
     return _public(user)
 
 
+# --- User-specific LLM config storage with encryption-at-rest ---
+from cryptography.fernet import Fernet
+import base64
+
+_secret = os.getenv("SECRET_KEY", "forgetmenot_default_secret_key_12345")
+_key_bytes = hashlib.sha256(_secret.encode()).digest()
+_fernet_key = base64.urlsafe_b64encode(_key_bytes)
+_cipher = Fernet(_fernet_key)
+
+def save_llm_config(user_id: str, provider: str, api_key: str, model: str) -> None:
+    encrypted_key = ""
+    if api_key:
+        encrypted_key = _cipher.encrypt(api_key.encode()).decode()
+    with _lock:
+        if user_id in _state["users"]:
+            _state["users"][user_id]["llm_config"] = {
+                "provider": provider,
+                "api_key_encrypted": encrypted_key,
+                "model": model
+            }
+            _save()
+
+def get_llm_config(user_id: str) -> dict | None:
+    u = _state["users"].get(user_id)
+    if not u or "llm_config" not in u:
+        return None
+    cfg = u["llm_config"]
+    decrypted_key = ""
+    enc_key = cfg.get("api_key_encrypted", "")
+    if enc_key:
+        try:
+            decrypted_key = _cipher.decrypt(enc_key.encode()).decode()
+        except Exception:
+            pass
+    return {
+        "provider": cfg.get("provider", "openai"),
+        "api_key": decrypted_key,
+        "model": cfg.get("model", "gpt-4o-mini")
+    }
+
+
 # --- Google OAuth (Authorization Code flow) ---
 # Needs GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI in the
 # environment. Until those are set, google_login_url() returns None and the

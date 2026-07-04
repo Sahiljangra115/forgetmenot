@@ -9,30 +9,41 @@ import os
 import io
 import json
 
-_client = None
-_tried = False
-_config = {
+_DEFAULT_CONFIG = {
     "provider": os.getenv("LLM_PROVIDER", "openai"),
     "api_key": os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or "",
     "model": os.getenv("SUMMARY_MODEL", "gpt-4o-mini"),
 }
 
-
-def set_config(provider: str, api_key: str, model: str):
-    """Update LLM configuration from frontend."""
-    global _client, _tried
-    _config["provider"] = provider
-    _config["api_key"] = api_key
-    _config["model"] = model
-    _client = None
-    _tried = False
-    print(f"[llm] config updated: provider={provider}, model={model}")
+# ponytail: cache clients using a tuple key of (user_id, provider, key, base_url, model)
+# so that the client automatically updates when settings change.
+_clients: dict[tuple, object] = {}
 
 
-def _get_base_url() -> str | None:
+def set_config(user_id: str | None, provider: str, api_key: str, model: str):
+    """Update LLM configuration for one user, saved to persistent auth store."""
+    import auth
+    auth.save_llm_config(user_id, provider, api_key, model)
+    # Clear client cache entries for this user
+    for k in list(_clients.keys()):
+        if k[0] == user_id:
+            _clients.pop(k, None)
+    print(f"[llm] config updated persistently for user={user_id}: provider={provider}, model={model}")
+
+
+def _config_for(user_id: str | None) -> dict:
+    if user_id:
+        import auth
+        cfg = auth.get_llm_config(user_id)
+        if cfg:
+            return cfg
+    return _DEFAULT_CONFIG
+
+
+def _get_base_url(user_id: str | None) -> str | None:
     """Get base URL for OpenAI-compatible servers."""
-    provider = _config.get("provider", "openai")
-    
+    provider = _config_for(user_id).get("provider", "openai")
+
     if provider == "ollama":
         return os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
     elif provider == "openrouter":
@@ -41,18 +52,19 @@ def _get_base_url() -> str | None:
         return "https://api.deepseek.com/v1"
     elif provider == "anthropic":
         return "https://api.anthropic.com/v1"
-    
+
     return os.getenv("LLM_BASE_URL")
 
 
-def _get_provider_key() -> str | None:
+def _get_provider_key(user_id: str | None) -> str | None:
     """Get API key for the configured provider."""
-    provider = _config.get("provider", "openai")
-    api_key = _config.get("api_key", "")
-    
+    config = _config_for(user_id)
+    provider = config.get("provider", "openai")
+    api_key = config.get("api_key", "")
+
     if api_key:
         return api_key
-    
+
     if provider == "openai":
         return os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
     elif provider == "anthropic":
@@ -65,52 +77,55 @@ def _get_provider_key() -> str | None:
         return os.getenv("GOOGLE_API_KEY")
     elif provider == "ollama":
         return "local"
-    
+
     return None
 
 
-def _get():
-    """Get or create LLM client."""
-    global _client, _tried
-    if _tried:
-        return _client
-    _tried = True
-    
-    provider = _config.get("provider", "openai")
-    key = _get_provider_key()
-    base_url = _get_base_url()
-    
+def _get(user_id: str | None = None):
+    """Get or create this user's LLM client."""
+    config = _config_for(user_id)
+    provider = config.get("provider", "openai")
+    key = _get_provider_key(user_id)
+    base_url = _get_base_url(user_id)
+    model = config.get("model", "gpt-4o-mini")
+
+    cache_key = (user_id, provider, key, base_url, model)
+    if cache_key in _clients:
+        return _clients[cache_key]
+
     if not key:
         print(f"[llm] no API key for provider {provider}, using plain-text fallback")
         return None
-    
+
+    client = None
     try:
         if provider == "anthropic":
             from anthropic import AsyncAnthropic
-            _client = AsyncAnthropic(api_key=key)
-            print(f"[llm] using Anthropic provider, model={_config.get('model')}")
+            client = AsyncAnthropic(api_key=key)
+            print(f"[llm] using Anthropic provider, model={model}")
         elif provider in ["openrouter", "deepseek", "ollama"]:
             from openai import AsyncOpenAI
-            _client = AsyncOpenAI(api_key=key, base_url=base_url)
-            print(f"[llm] using {provider} at {base_url}, model={_config.get('model')}")
+            client = AsyncOpenAI(api_key=key, base_url=base_url)
+            print(f"[llm] using {provider} at {base_url}, model={model}")
         elif provider == "google":
             import anthropic
-            _client = anthropic.AsyncAnthropic(api_key=key)
-            print(f"[llm] using Google Gemini via Anthropic SDK, model={_config.get('model')}")
+            client = anthropic.AsyncAnthropic(api_key=key)
+            print(f"[llm] using Google Gemini via Anthropic SDK, model={model}")
         else:
             from openai import AsyncOpenAI
-            _client = AsyncOpenAI(api_key=key, base_url=base_url) if base_url else AsyncOpenAI(api_key=key)
-            print(f"[llm] using OpenAI provider, model={_config.get('model')}")
+            client = AsyncOpenAI(api_key=key, base_url=base_url) if base_url else AsyncOpenAI(api_key=key)
+            print(f"[llm] using OpenAI provider, model={model}")
     except Exception as e:
         print(f"[llm] client creation failed for {provider}: {e}")
-        _client = None
-    
-    return _client
+        client = None
+
+    _clients[cache_key] = client
+    return client
 
 
-def _model() -> str:
+def _model(user_id: str | None) -> str:
     """Get configured model name."""
-    return _config.get("model", "gpt-4o-mini")
+    return _config_for(user_id).get("model", "gpt-4o-mini")
 
 
 def _stt_model() -> str:
@@ -118,17 +133,17 @@ def _stt_model() -> str:
     return os.getenv("STT_MODEL", "whisper-1")
 
 
-async def transcribe(audio_bytes: bytes, filename: str = "clip.webm") -> str | None:
+async def transcribe(audio_bytes: bytes, filename: str = "clip.webm", user_id: str | None = None) -> str | None:
     """Transcribe audio. Only works with OpenAI provider."""
     if not audio_bytes:
         return None
-    
-    provider = _config.get("provider", "openai")
+
+    provider = _config_for(user_id).get("provider", "openai")
     if provider != "openai":
         print(f"[llm] transcription not supported for {provider}")
         return None
-    
-    client = _get()
+
+    client = _get(user_id)
     if client is None:
         return None
     
@@ -143,22 +158,22 @@ async def transcribe(audio_bytes: bytes, filename: str = "clip.webm") -> str | N
         return None
 
 
-async def one_liner(person: dict, snippets: list[str]) -> str:
+async def one_liner(person: dict, snippets: list[str], user_id: str | None = None) -> str:
     """Turn recalled memory into one short reminder sentence."""
     joined = " ".join(s for s in snippets if s).strip()
     if not joined:
         return f"This is {person['name']}, your {person['relation']}."
-    
-    client = _get()
+
+    client = _get(user_id)
     if client is None:
         return joined[:160]
-    
-    provider = _config.get("provider", "openai")
-    
+
+    provider = _config_for(user_id).get("provider", "openai")
+
     try:
         if provider == "anthropic":
             r = await client.messages.create(
-                model=_model(),
+                model=_model(user_id),
                 max_tokens=60,
                 system=(
                     "You help someone with memory loss. Write one short, warm "
@@ -173,7 +188,7 @@ async def one_liner(person: dict, snippets: list[str]) -> str:
             return r.content[0].text.strip()
         else:
             r = await client.chat.completions.create(
-                model=_model(),
+                model=_model(user_id),
                 messages=[
                     {"role": "system", "content": (
                         "You help someone with memory loss. Write one short, warm "
@@ -194,22 +209,22 @@ async def one_liner(person: dict, snippets: list[str]) -> str:
         return joined[:160]
 
 
-async def summarize_conversation(person: dict, notes: list[str]) -> dict:
+async def summarize_conversation(person: dict, notes: list[str], user_id: str | None = None) -> dict:
     """Turn accumulated session notes into a summary and bullet points."""
     joined = " ".join(n for n in notes if n).strip()
     if not joined:
         return {"short": "Listening for conversation...", "bullets": []}
-    
-    client = _get()
+
+    client = _get(user_id)
     if client is None:
         return {"short": joined[:120], "bullets": notes[-5:]}
-    
-    provider = _config.get("provider", "openai")
-    
+
+    provider = _config_for(user_id).get("provider", "openai")
+
     try:
         if provider == "anthropic":
             r = await client.messages.create(
-                model=_model(),
+                model=_model(user_id),
                 max_tokens=200,
                 system=(
                     "Summarize this conversation transcript for a caregiver dashboard. "
@@ -225,7 +240,7 @@ async def summarize_conversation(person: dict, notes: list[str]) -> dict:
             data = json.loads(r.content[0].text)
         else:
             r = await client.chat.completions.create(
-                model=_model(),
+                model=_model(user_id),
                 messages=[
                     {"role": "system", "content": (
                         "Summarize this conversation transcript for a caregiver dashboard. "
@@ -252,23 +267,23 @@ async def summarize_conversation(person: dict, notes: list[str]) -> dict:
         return {"short": joined[:120], "bullets": notes[-5:]}
 
 
-async def distill(person: dict, notes: list[str]) -> str | None:
+async def distill(person: dict, notes: list[str], user_id: str | None = None) -> str | None:
     """Compress raw session notes into one durable fact for the graph."""
     joined = " ".join(n for n in notes if n).strip()
     if not joined:
         return None
-    
-    client = _get()
+
+    client = _get(user_id)
     prefix = f"About {person['name']} ({person['relation']}): "
     if client is None:
         return prefix + joined[:200]
-    
-    provider = _config.get("provider", "openai")
-    
+
+    provider = _config_for(user_id).get("provider", "openai")
+
     try:
         if provider == "anthropic":
             r = await client.messages.create(
-                model=_model(),
+                model=_model(user_id),
                 max_tokens=80,
                 system=(
                     "Distill these raw observation notes into one durable, "
@@ -282,7 +297,7 @@ async def distill(person: dict, notes: list[str]) -> str | None:
             return prefix + r.content[0].text.strip()
         else:
             r = await client.chat.completions.create(
-                model=_model(),
+                model=_model(user_id),
                 messages=[
                     {"role": "system", "content": (
                         "Distill these raw observation notes into one durable, "

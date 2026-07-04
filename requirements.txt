@@ -7,3 +7,4 @@ anthropic
 razorpay
 httpx
 pydantic
+cryptography

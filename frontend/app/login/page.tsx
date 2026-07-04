@@ -27,6 +27,7 @@ export default function LoginPage() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleConfigured, setGoogleConfigured] = useState(false);
+  const [redirectTarget, setRedirectTarget] = useState("/camera");
 
   const getBackendUrl = () => {
     if (process.env.NEXT_PUBLIC_BACKEND_URL) {
@@ -44,6 +45,14 @@ export default function LoginPage() {
       .then((r) => r.json())
       .then((d) => setGoogleConfigured(!!d.google_configured))
       .catch(() => setGoogleConfigured(false));
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const dest = params.get("redirect");
+      if (dest) {
+        setRedirectTarget(dest);
+      }
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -61,7 +70,7 @@ export default function LoginPage() {
       if (!r.ok) throw new Error(data.error || "Something went wrong.");
 
       toast.success(mode === "signup" ? `Welcome, ${data.user.name}.` : "Welcome back.");
-      router.push("/camera");
+      router.push(redirectTarget);
     } catch (err: any) {
       toast.error(err.message || "Failed to sign in.");
     } finally {
