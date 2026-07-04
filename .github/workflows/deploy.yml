@@ -39,6 +39,8 @@ jobs:
           npm ci
 
       - name: Build with Next.js
+        env:
+          NEXT_PUBLIC_BACKEND_URL: ${{ vars.NEXT_PUBLIC_BACKEND_URL }}
         run: |
           cd frontend
           npm run build
