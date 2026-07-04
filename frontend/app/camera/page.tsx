@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 const MODEL_URL = "/models";
 const DETECT_MS = 500;
@@ -69,6 +70,7 @@ interface LogEntry {
 
 export default function CameraPage() {
   const router = useRouter();
+  const [welcomeOpen, setWelcomeOpen] = useState(true);
   const [modelsReady, setModelsReady] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [detecting, setDetecting] = useState(false);
@@ -426,6 +428,13 @@ export default function CameraPage() {
     addLog("Camera stream stopped.");
   };
 
+  // Auto-dismiss the landing reminder popup
+  useEffect(() => {
+    if (!welcomeOpen) return;
+    const t = setTimeout(() => setWelcomeOpen(false), 4000);
+    return () => clearTimeout(t);
+  }, [welcomeOpen]);
+
   // Detection loop
   useEffect(() => {
     if (!streaming || !modelsReady) return;
@@ -749,6 +758,21 @@ export default function CameraPage() {
 
   return (
     <div className="min-h-screen bg-black text-foreground antialiased font-sans">
+      <Dialog open={welcomeOpen} onOpenChange={setWelcomeOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="border-white/15 bg-white/10 backdrop-blur-2xl text-white shadow-2xl sm:max-w-sm"
+        >
+          <DialogTitle className="text-white">Quick reminder</DialogTitle>
+          <DialogDescription className="text-white/70">
+            Point the camera at a face to recognize and recall who they are. Keep faces well-lit and centered for best results.
+          </DialogDescription>
+          <Button onClick={() => setWelcomeOpen(false)} className="mt-2 w-full">
+            Got it
+          </Button>
+        </DialogContent>
+      </Dialog>
+
       {/* Script loader for vladmandic face-api */}
       <Script
         src="/face-api.js"
