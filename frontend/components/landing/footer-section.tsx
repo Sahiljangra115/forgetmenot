@@ -11,10 +11,10 @@ const footerLinks = {
     { name: "Use Cases", href: "#impact" },
   ],
   Resources: [
-    { name: "Documentation", href: "https://github.com" },
+    { name: "Documentation", href: "https://github.com/Sahiljangra115/forgetmenot" },
     { name: "Cognee Docs", href: "https://docs.cognee.ai" },
-    { name: "API Reference", href: "https://github.com" },
-    { name: "GitHub", href: "https://github.com" },
+    { name: "API Reference", href: "https://github.com/Sahiljangra115/forgetmenot" },
+    { name: "GitHub", href: "https://github.com/Sahiljangra115/forgetmenot" },
   ],
   About: [
     { name: "Project Origin", href: "#" },
@@ -29,7 +29,7 @@ const footerLinks = {
 };
 
 const socialLinks = [
-  { name: "GitHub", href: "https://github.com" },
+  { name: "GitHub", href: "https://github.com/Sahiljangra115/forgetmenot" },
   { name: "Cognee", href: "https://github.com/topoteretes/cognee" },
   { name: "Demo Video", href: "#" },
 ];
