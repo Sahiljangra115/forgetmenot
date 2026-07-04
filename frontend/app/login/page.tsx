@@ -29,6 +29,9 @@ export default function LoginPage() {
   const [googleConfigured, setGoogleConfigured] = useState(false);
 
   const getBackendUrl = () => {
+    if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+      return process.env.NEXT_PUBLIC_BACKEND_URL.replace(/\/$/, "");
+    }
     if (typeof window === "undefined") return "";
     const protocol = window.location.protocol;
     const host = window.location.hostname;

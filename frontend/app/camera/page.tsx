@@ -130,6 +130,9 @@ export default function CameraPage() {
   const listeningRef = useRef(false);
 
   const getBackendUrl = () => {
+    if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+      return process.env.NEXT_PUBLIC_BACKEND_URL.replace(/\/$/, "");
+    }
     if (typeof window === "undefined") return "";
     const protocol = window.location.protocol;
     const host = window.location.hostname;
@@ -138,6 +141,17 @@ export default function CameraPage() {
   };
 
   const getWsUrl = () => {
+    if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL.replace(/\/$/, "");
+      const wsProto = backendUrl.startsWith("https") ? "wss" : "ws";
+      try {
+        const url = new URL(backendUrl);
+        return `${wsProto}://${url.host}/ws`;
+      } catch (e) {
+        // Fallback if not a valid URL
+        return `${wsProto}://${backendUrl.replace(/^https?:\/\//, "")}/ws`;
+      }
+    }
     if (typeof window === "undefined") return "";
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const host = window.location.hostname;

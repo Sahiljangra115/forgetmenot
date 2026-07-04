@@ -57,8 +57,12 @@ const plans = [
   },
 ];
 
-const getBackendUrl = () =>
-  typeof window !== "undefined" && window.location.port === "3000" ? "http://localhost:8000" : "";
+const getBackendUrl = () => {
+  if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+    return process.env.NEXT_PUBLIC_BACKEND_URL.replace(/\/$/, "");
+  }
+  return typeof window !== "undefined" && window.location.port === "3000" ? "http://localhost:8000" : "";
+};
 
 const loadRazorpayScript = () =>
   new Promise<boolean>((resolve) => {
