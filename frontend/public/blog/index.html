@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ForgetMeNot: building a memory prosthetic on Cognee</title>
+<style>
+  :root {
+    --bg:      oklch(98% 0.004 95);
+    --surface: oklch(100% 0.002 95);
+    --fg:      oklch(20% 0.018 70);
+    --muted:   oklch(48% 0.012 70);
+    --border:  oklch(90% 0.006 95);
+    --accent:  oklch(52% 0.10 28);
+    --code-bg: oklch(96% 0.005 95);
+    --font-display: 'Iowan Old Style', 'Charter', Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:      oklch(19% 0.01 70);
+      --surface: oklch(23% 0.01 70);
+      --fg:      oklch(92% 0.008 95);
+      --muted:   oklch(66% 0.01 90);
+      --border:  oklch(32% 0.01 70);
+      --accent:  oklch(70% 0.11 40);
+      --code-bg: oklch(24% 0.01 70);
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.65;
+    text-rendering: optimizeLegibility;
+  }
+  .measure { max-width: 700px; margin-inline: auto; padding-inline: 24px; }
+
+  /* Masthead */
+  .masthead {
+    border-bottom: 1px solid var(--border);
+    padding-block: 18px;
+  }
+  .masthead-inner {
+    max-width: 1100px; margin-inline: auto; padding-inline: 24px;
+    display: flex; align-items: baseline; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+  }
+  .wordmark {
+    font-family: var(--font-display); font-size: 20px; font-weight: 600;
+    letter-spacing: -0.01em; color: var(--fg); text-decoration: none;
+  }
+  .masthead nav { display: flex; gap: 22px; }
+  .masthead nav a {
+    font-size: 13px; letter-spacing: 0.02em; color: var(--muted);
+    text-decoration: none;
+  }
+  .masthead nav a:hover { color: var(--fg); }
+
+  /* Article header */
+  .article-header { padding-block: 72px 40px; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 12px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--accent); margin-bottom: 22px;
+  }
+  h1 {
+    font-family: var(--font-display); font-weight: 400;
+    font-size: clamp(38px, 6vw, 60px); line-height: 1.08;
+    letter-spacing: -0.02em; margin-bottom: 24px;
+    text-wrap: balance;
+  }
+  .deck {
+    font-size: 20px; line-height: 1.5; color: var(--muted);
+    max-width: 620px; margin-bottom: 30px; text-wrap: pretty;
+  }
+  .byline { font-size: 14px; color: var(--muted); }
+  .byline b { color: var(--fg); font-weight: 550; }
+
+  /* Hero */
+  .hero { max-width: 1000px; margin: 24px auto 0; padding-inline: 24px; }
+  .hero img, figure img {
+    width: 100%; display: block; border: 1px solid var(--border);
+  }
+  figcaption, .hero .cap {
+    font-size: 13px; color: var(--muted); margin-top: 10px; line-height: 1.5;
+  }
+
+  /* TOC */
+  .toc {
+    border: 1px solid var(--border); background: var(--surface);
+    padding: 28px 30px; margin: 56px 0 0;
+  }
+  .toc-title {
+    font-family: var(--font-mono); font-size: 12px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); margin-bottom: 16px;
+  }
+  .toc ol { list-style: none; counter-reset: toc; columns: 2; column-gap: 40px; }
+  .toc li { counter-increment: toc; break-inside: avoid; }
+  .toc a {
+    display: flex; gap: 12px; align-items: baseline;
+    padding-block: 7px; text-decoration: none; color: var(--fg);
+    font-size: 15px; border-bottom: 1px solid var(--border);
+  }
+  .toc a::before {
+    content: counter(toc, decimal-leading-zero);
+    font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+  }
+  .toc a:hover { color: var(--accent); }
+  @media (max-width: 640px) { .toc ol { columns: 1; } }
+
+  /* Judges note */
+  .judges-note {
+    border: 1px solid var(--border); border-inline-start: 3px solid var(--accent);
+    background: var(--surface); padding: 20px 24px; margin-top: 20px;
+    font-size: 15px; line-height: 1.6; color: var(--fg);
+  }
+  .judges-note .jn-title {
+    font-family: var(--font-mono); font-size: 12px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px;
+  }
+  .judges-note p { margin-bottom: 0; max-width: none; }
+
+  /* Body typography */
+  article { padding-block: 20px 0; }
+  section.page { padding-block: 64px 8px; }
+  section.page + section.page { border-top: 1px solid var(--border); margin-top: 56px; }
+  .page-no {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 14px;
+  }
+  h2 {
+    font-family: var(--font-display); font-weight: 450;
+    font-size: clamp(26px, 4vw, 34px); line-height: 1.15;
+    letter-spacing: -0.015em; margin-bottom: 26px; text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--font-display); font-weight: 550; font-size: 21px;
+    letter-spacing: -0.01em; margin: 38px 0 14px;
+  }
+  p { margin-bottom: 20px; max-width: 66ch; text-wrap: pretty; }
+  article a { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+  ul, ol { margin: 0 0 22px; padding-inline-start: 24px; max-width: 64ch; }
+  li { margin-bottom: 8px; }
+
+  /* Code */
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    padding: 18px 20px; overflow-x: auto; margin: 26px 0 30px;
+    font-family: var(--font-mono); font-size: 13.5px; line-height: 1.6;
+  }
+  code { font-family: var(--font-mono); font-size: 0.92em; }
+  p code, li code { background: var(--code-bg); padding: 1px 5px; border: 1px solid var(--border); }
+
+  /* Pull quote */
+  .pull {
+    font-family: var(--font-display); font-weight: 400;
+    font-size: clamp(24px, 3.6vw, 32px); line-height: 1.28; letter-spacing: -0.01em;
+    border-inline-start: 3px solid var(--accent);
+    padding-inline-start: 26px; margin: 52px 0;
+    max-width: 620px;
+  }
+
+  /* Inline blockquote */
+  blockquote.inline-q {
+    border-inline-start: 2px solid var(--border);
+    padding-inline-start: 20px; margin: 26px 0; color: var(--muted);
+    font-style: italic; max-width: 60ch;
+  }
+
+  /* Figures */
+  figure { margin: 36px 0; }
+  figure.wide { max-width: 900px; margin-inline: auto; }
+
+  /* Diagram */
+  .diagram {
+    border: 1px solid var(--border); background: var(--surface);
+    padding: 20px 12px; margin: 34px 0;
+  }
+  .diagram svg { width: 100%; height: auto; display: block; }
+  .diagram-cap { font-size: 13px; color: var(--muted); margin-top: 8px; padding-inline: 8px; }
+
+  /* Author footer */
+  .author {
+    display: flex; gap: 20px; align-items: flex-start;
+    border-top: 1px solid var(--border); margin-top: 72px; padding-block: 40px;
+  }
+  .avatar {
+    flex: none; width: 56px; height: 56px; border-radius: 50%;
+    background: var(--fg); color: var(--bg);
+    display: grid; place-items: center;
+    font-family: var(--font-display); font-size: 20px; font-weight: 550;
+  }
+  .author p { font-size: 15px; color: var(--muted); margin-bottom: 0; }
+  .author .who { font-size: 15px; color: var(--fg); font-weight: 550; margin-bottom: 4px; }
+
+  /* Related */
+  .related { border-top: 1px solid var(--border); padding-block: 48px 80px; }
+  .related-inner { max-width: 1000px; margin-inline: auto; padding-inline: 24px; }
+  .related h4 {
+    font-family: var(--font-mono); font-size: 12px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); font-weight: 500; margin-bottom: 24px;
+  }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  @media (max-width: 720px) { .cards { grid-template-columns: 1fr; } }
+  .card { text-decoration: none; color: var(--fg); }
+  .card .thumb { aspect-ratio: 16/9; background: var(--code-bg); border: 1px solid var(--border); margin-bottom: 14px; }
+  .card .t { font-family: var(--font-display); font-size: 18px; line-height: 1.3; letter-spacing: -0.01em; margin-bottom: 6px; }
+  .card .x { font-size: 14px; color: var(--muted); line-height: 1.5; margin-bottom: 8px; }
+  .card .d { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .card:hover .t { color: var(--accent); }
+
+  table.specs {
+    border-collapse: collapse; width: 100%; margin: 26px 0 30px; font-size: 15px;
+  }
+  .specs th, .specs td {
+    text-align: left; padding: 9px 14px 9px 0; border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .specs th { font-weight: 550; white-space: nowrap; }
+  .specs td { color: var(--muted); }
+  .specs td code { color: var(--fg); }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="wordmark" href="#top">ForgetMeNot</a>
+    <nav>
+      <a href="#p1">Story</a>
+      <a href="#p3">How it works</a>
+      <a href="#p5">Cognee</a>
+      <a href="#p7">Stack</a>
+      <a href="#p10">Credits</a>
+    </nav>
+  </div>
+</header>
+
+<div class="measure article-header" id="top">
+  <p class="eyebrow">Build log · WeMakeDevs hackathon</p>
+  <h1 data-od-id="headline">ForgetMeNot: a memory prosthetic for dementia care, built on Cognee</h1>
+  <p class="deck">A camera watches the room. When someone your loved one can no longer place walks in, a small card appears next to their face: "This is Maya, your granddaughter. She visited you on Sunday." Here is how we built it, and how Cognee ended up carrying the whole product.</p>
+  <p class="byline"><b>The ForgetMeNot team</b> · July 2026 · 15 min read</p>
+</div>
+
+<div class="hero" data-od-id="hero">
+  <img src="assets/landing-top.jpeg" alt="ForgetMeNot landing page showing the live recognition view with a reminder card anchored to a recognized face">
+  <p class="cap">The live view. Recognition runs in the browser; the one-line reminder comes back from Cognee through the recall loop described below.</p>
+</div>
+
+<div class="measure">
+  <nav class="toc" aria-label="Table of contents">
+    <p class="toc-title">Index</p>
+    <ol>
+      <li><a href="#p1">Why we built ForgetMeNot</a></li>
+      <li><a href="#p2">What is Cognee</a></li>
+      <li><a href="#p3">How the agent works</a></li>
+      <li><a href="#p4">The memory pipeline</a></li>
+      <li><a href="#p5">How we used Cognee, honestly</a></li>
+      <li><a href="#p6">Product features</a></li>
+      <li><a href="#p7">Tech stack and architecture</a></li>
+      <li><a href="#p8">What we learned</a></li>
+      <li><a href="#p9">Where this is headed: smart glasses</a></li>
+      <li><a href="#p10">Credits and thanks</a></li>
+    </ol>
+  </nav>
+
+  <aside class="judges-note">
+    <p class="jn-title">A note for the judges</p>
+    <p>Honest hackathon budgeting: we could not afford to keep an LLM API bill running on the deployed demo. The app takes your key at runtime instead. Open the settings dropdown, paste any key you have (OpenAI, OpenRouter, Google Gemini, or Ollama), and the one-line reminders, voice transcription, and distill all light up. Keys are stored encrypted. Everything else, recognition included, works without one.</p>
+  </aside>
+</div>
+
+<article class="measure" data-od-id="body">
+
+  <section class="page" id="p1">
+    <p class="page-no">Page 01</p>
+    <h2>Why we built ForgetMeNot</h2>
+    <p>There is a specific moment that families living with dementia describe over and over. Someone walks into the room. The person with dementia looks up, and there is a beat of silence where recognition should be. A granddaughter becomes a polite stranger. A husband of forty years gets a wary nod. Both people feel it, and both people pretend they didn't.</p>
+    <p>Caregivers work around this with whispered introductions at the door, name tags at family gatherings, photo albums with labels. These help, but they are all interventions that announce the problem. What families actually want is something quieter. A prompt that arrives at the exact moment it is needed, phrased the way a kind person would phrase it, visible only to the person who needs it.</p>
+    <p>That is ForgetMeNot. Point a tablet or laptop camera at the room. When a known face appears, the app anchors a small card next to it with one warm line: who this is, how they are connected, and one recent thing worth knowing. Not a dossier. One sentence.</p>
+    <p>The hard part is not the face recognition. Face recognition is a solved problem you can run in a browser tab. The hard part is the memory behind the face: accumulating notes, voice observations, and family-provided facts about a person over weeks, then compressing all of it into a single line that is accurate today. That is a memory problem, and it is the part of the product that Cognee carries.</p>
+  </section>
+
+  <section class="page" id="p2">
+    <p class="page-no">Page 02</p>
+    <h2>What is Cognee</h2>
+    <p>If you have not met it before: <a href="https://github.com/topoteretes/cognee">Cognee</a> is an open source AI memory engine. You hand it raw text, and it turns that text into two things at once: a knowledge graph of entities and relationships, and vector embeddings over the same content. Queries can then lean on both, graph structure for "who is connected to what" and semantic similarity for "what is this about."</p>
+    <p>Internally it runs what the Cognee team calls an ECL pipeline: Extract, Cognify, Load. Extract ingests and normalizes the raw data. Cognify is the interesting step, where an LLM decomposes the text into entities, relationships, and summaries and wires them into the graph. Load persists the graph and the embeddings into the configured stores so they are queryable.</p>
+    <p>From the application side you mostly touch three verbs:</p>
+    <ul>
+      <li><code>remember</code> writes new information into a dataset and triggers the ECL pipeline over it.</li>
+      <li><code>recall</code> answers a natural-language question against everything remembered, using the graph and embeddings together.</li>
+      <li><code>forget</code> deletes remembered data.</li>
+    </ul>
+    <p>Two more properties mattered for us. Cognee runs both as a hosted cloud service and self-hosted, so a hackathon project can start on the cloud tenant and a privacy-sensitive deployment can move on-premise without an API rewrite. And writes can run with a <code>self_improvement</code> flag, which has Cognee enrich the incoming data inline, connecting it to what it already knows rather than filing it as an isolated blob. For a product whose whole job is "know this one person deeply," that enrichment on write is exactly the right default.</p>
+  </section>
+
+  <section class="page" id="p3">
+    <p class="page-no">Page 03</p>
+    <h2>How the agent works</h2>
+    <p>The live loop starts in the browser and ends in the browser, with Cognee in the middle. We were strict about one constraint from day one: no face image ever leaves the client.</p>
+    <p>The camera feed runs through face-api.js locally, on a detection loop at 2 fps. That is plenty for a person walking into a room, and it keeps a mid-range laptop cool. For each detected face, face-api.js produces a 128-float descriptor, a compact numerical fingerprint of the face. That descriptor, 128 numbers and nothing else, is what goes over a WebSocket to our FastAPI backend. Not a frame, not a crop, not a thumbnail.</p>
+    <p>The backend compares the descriptor against a local face registry (<code>people.json</code>) using euclidean distance. Distances below 0.55 count as a match; the threshold is exposed as a slider in the UI because lighting conditions vary a lot between a demo booth and a living room.</p>
+    <p>On a match, the backend asks Cognee what it knows:</p>
+<pre>snippets = await memory.recall(
+    f"what do I know about {person.name}",
+    dataset=person.id,
+)</pre>
+    <p>Cognee returns graph-and-embedding-backed snippets about that person. An LLM then compresses the snippets into one warm, present-tense line ("This is Maya, your granddaughter. She brought you tulips on Sunday."). The line travels back over the same WebSocket and the frontend anchors it as a card next to the matched face in the video feed.</p>
+    <p>Recall plus LLM synthesis is too slow to run per frame, so results are cached per person for 30 seconds. A face that stays in frame keeps its card without re-querying; a face that returns a minute later gets a fresh recall, which matters because the memory may have changed in between (more on distillation below).</p>
+
+    <figure class="diagram" data-od-id="diagram-recall">
+      <svg viewBox="0 0 880 300" role="img" aria-label="Recall loop diagram: camera to descriptor to WebSocket to registry match to Cognee recall to LLM one-liner to card">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+          </marker>
+        </defs>
+        <style>
+          .box { fill: var(--bg); stroke: var(--border); stroke-width: 1.5; }
+          .box-hl { fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
+          .lbl { font: 550 13px var(--font-body); fill: var(--fg); }
+          .sub { font: 11px var(--font-mono); fill: var(--muted); }
+          .zone { font: 11px var(--font-mono); fill: var(--muted); letter-spacing: 1px; }
+          .flow { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+          .fence { stroke: var(--border); stroke-width: 1; stroke-dasharray: 5 5; }
+        </style>
+        <text class="zone" x="20" y="28">BROWSER</text>
+        <text class="zone" x="330" y="28">SERVER (FASTAPI)</text>
+        <text class="zone" x="648" y="28">COGNEE</text>
+        <line class="fence" x1="310" y1="14" x2="310" y2="286"/>
+        <line class="fence" x1="632" y1="14" x2="632" y2="286"/>
+
+        <rect class="box" x="20" y="52" width="130" height="56" rx="2"/>
+        <text class="lbl" x="34" y="76">Camera feed</text>
+        <text class="sub" x="34" y="94">face-api.js · 2 fps</text>
+
+        <rect class="box" x="20" y="150" width="130" height="56" rx="2"/>
+        <text class="lbl" x="34" y="174">Descriptor</text>
+        <text class="sub" x="34" y="192">128 floats only</text>
+
+        <rect class="box" x="340" y="150" width="130" height="56" rx="2"/>
+        <text class="lbl" x="354" y="174">Registry match</text>
+        <text class="sub" x="354" y="192">euclidean &lt; 0.55</text>
+
+        <rect class="box-hl" x="660" y="150" width="130" height="56" rx="2"/>
+        <text class="lbl" x="674" y="174">recall()</text>
+        <text class="sub" x="674" y="192">dataset=personId</text>
+
+        <rect class="box" x="340" y="230" width="130" height="56" rx="2"/>
+        <text class="lbl" x="354" y="254">LLM one-liner</text>
+        <text class="sub" x="354" y="272">cached 30 s</text>
+
+        <rect class="box" x="20" y="230" width="130" height="56" rx="2"/>
+        <text class="lbl" x="34" y="254">Card on face</text>
+        <text class="sub" x="34" y="272">anchored overlay</text>
+
+        <path class="flow" d="M85 108 L85 148"/>
+        <path class="flow" d="M150 178 L338 178"/>
+        <text class="sub" x="200" y="170">WebSocket</text>
+        <path class="flow" d="M470 178 L658 178"/>
+        <path class="flow" d="M725 206 C725 258 520 258 472 258"/>
+        <path class="flow" d="M340 258 L152 258"/>
+        <text class="sub" x="200" y="250">WebSocket</text>
+      </svg>
+      <p class="diagram-cap">The recall loop. Faces are embedded in the browser; only the 128-float descriptor crosses the network. Cognee answers the "who is this" question from the person's dataset.</p>
+    </figure>
+  </section>
+
+  <section class="page" id="p4">
+    <p class="page-no">Page 04</p>
+    <h2>The memory pipeline</h2>
+    <p>Recognition is the visible half of the product. The other half is how a person's memory gets built, sharpened, and, when needed, destroyed. Four mechanics.</p>
+
+    <h3>Enroll</h3>
+    <p>A caregiver enrolls a person from the camera: capture the face, store the descriptor in <code>people.json</code>, and seed one founding fact into Cognee ("Maya is Prem's granddaughter, she studies in Pune"). The seed fact goes in through <code>remember</code>, so it immediately becomes graph nodes and embeddings rather than a row in a table:</p>
+<pre>await memory.remember(
+    f"{name} is {relation}. {seed_fact}",
+    dataset_name=person_id,
+    self_improvement=True,
+)</pre>
+
+    <h3>Observe</h3>
+    <p>Between visits, caregivers add observations. Typed notes, or voice clips transcribed with Whisper via Groq's STT endpoint. Each observation is remembered into that person's dataset. Because writes run with <code>self_improvement=True</code>, Cognee enriches each note against what it already holds, so "she mentioned the tulips again" attaches to the earlier tulip fact instead of floating free.</p>
+
+    <h3>Distill</h3>
+    <p>Session notes are messy by nature. The Distill button hands a person's accumulated notes to an LLM, which condenses them into one clean, durable fact. That fact is written back into Cognee through the same <code>remember</code> path, and the person's 30-second reminder cache is invalidated. The next time their face appears, the recall is visibly sharper. This was our favorite demo moment: press Distill, walk back into frame, and the card's sentence has improved.</p>
+
+    <h3>Forget</h3>
+    <p>Forget deletes the person's entire Cognee dataset. This is not soft deletion or a hidden flag. The dataset is gone, and with it every note, every distilled fact, every graph node derived from them. For an app that holds intimate observations about a vulnerable person, we considered real deletion a requirement, not a feature.</p>
+
+    <figure class="diagram" data-od-id="diagram-lifecycle">
+      <svg viewBox="0 0 880 170" role="img" aria-label="Memory lifecycle diagram: observe to remember to distill to permanent fact, with forget deleting the dataset">
+        <defs>
+          <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+          </marker>
+        </defs>
+        <style>
+          .b2 { fill: var(--bg); stroke: var(--border); stroke-width: 1.5; }
+          .b2-hl { fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
+          .l2 { font: 550 13px var(--font-body); fill: var(--fg); }
+          .s2 { font: 11px var(--font-mono); fill: var(--muted); }
+          .f2 { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#arr2); }
+        </style>
+        <rect class="b2" x="20" y="40" width="150" height="56" rx="2"/>
+        <text class="l2" x="34" y="64">Observe</text>
+        <text class="s2" x="34" y="82">notes · voice (STT)</text>
+
+        <rect class="b2-hl" x="230" y="40" width="150" height="56" rx="2"/>
+        <text class="l2" x="244" y="64">remember()</text>
+        <text class="s2" x="244" y="82">self_improvement</text>
+
+        <rect class="b2" x="440" y="40" width="150" height="56" rx="2"/>
+        <text class="l2" x="454" y="64">Distill</text>
+        <text class="s2" x="454" y="82">LLM condenses</text>
+
+        <rect class="b2" x="650" y="40" width="150" height="56" rx="2"/>
+        <text class="l2" x="664" y="64">Durable fact</text>
+        <text class="s2" x="664" y="82">cache invalidated</text>
+
+        <path class="f2" d="M170 68 L228 68"/>
+        <path class="f2" d="M380 68 L438 68"/>
+        <path class="f2" d="M590 68 L648 68"/>
+        <path class="f2" d="M725 96 C725 140 420 140 382 96"/>
+        <text class="s2" x="470" y="150">written back through remember()</text>
+
+        <rect class="b2" x="230" y="118" width="150" height="0" rx="2"/>
+        <text class="s2" x="24" y="150">forget() → deletes the whole dataset, everything above included</text>
+      </svg>
+      <p class="diagram-cap">The memory lifecycle. Observations accumulate, distillation compresses them into durable facts, and forget removes the entire per-person dataset.</p>
+    </figure>
+  </section>
+
+  <section class="page" id="p5">
+    <p class="page-no">Page 05</p>
+    <h2>How we used Cognee, honestly</h2>
+    <p>Here is the engineering story as it actually happened, because the detour taught us more than the plan did.</p>
+    <p>Our original design used Cognee's <code>session_id</code> for per-person isolation: one memory store, sessions as partitions, one session per enrolled person. It looked clean on paper. On 2026-07-03 we ran the design against a real Cognee Cloud tenant, and it fell over in two ways. Session-scoped recall never surfaced any content we had written; queries came back empty no matter how we phrased them. And forget had no session-scoped delete at all, which for us was disqualifying on its own, since per-person deletion is the privacy contract of the app.</p>
+
+    <blockquote class="pull" data-od-id="pullquote">Our session_id design died on contact with production. One dataset per person replaced it in an afternoon, and both recall and forget started working on the first try.</blockquote>
+
+    <p>The fix was to stop partitioning inside a store and let Cognee's own dataset boundary do the isolation: one Cognee dataset per person, with <code>dataset_name=personId</code>. Recall against a person's dataset worked first try. Better, <code>forget(dataset=personId)</code> became a genuinely complete deletion, one call that removes everything the system ever learned about a person. The pivot deleted code and made the product's strongest promise easier to keep. We will take that trade every time.</p>
+    <p>Beyond the dataset model, three integration decisions shaped how Cognee sits in the codebase:</p>
+    <ol>
+      <li>Every write runs with <code>self_improvement=True</code>, so enrichment happens inline at remember time instead of in a batch job we would have had to build.</li>
+      <li>Every Cognee call has a 45-second timeout backstop and degrades to a local JSON fallback. A live demo in front of judges must never hang on a network call. The app runs in three modes, cloud, local, and fallback, and the current mode is shown live as a status pill in the UI. Nothing is hidden; if we are degraded, the screen says so.</li>
+      <li>A memory-ops log panel in the UI streams every <code>remember</code>, <code>recall</code>, and <code>forget</code> call as it happens. Partly for debugging, mostly because watching the memory layer work is the most convincing part of the demo.</li>
+    </ol>
+    <blockquote class="inline-q">The uncomfortable summary: the feature we designed around did not survive its first real API call, and the feature we pivoted to worked immediately. Test against the real service before you architect around the docs.</blockquote>
+  </section>
+
+  <section class="page" id="p6">
+    <p class="page-no">Page 06</p>
+    <h2>Product features</h2>
+    <p>What is actually in the shipped app, as demoed:</p>
+    <ul>
+      <li>Live recognition cards anchored to faces in the camera feed, refreshed through the 30-second per-person cache.</li>
+      <li>Enroll from camera, with a seed fact written straight into a fresh Cognee dataset.</li>
+      <li>Text notes and voice notes per person; voice is transcribed by Whisper on Groq, with an OpenAI fallback, before being remembered.</li>
+      <li>A Distill button that condenses a person's session notes into one clean fact and invalidates their cache.</li>
+      <li>Forget person, which deletes their entire Cognee dataset.</li>
+      <li>A match-threshold slider around the 0.55 euclidean default, for adjusting to room lighting.</li>
+      <li>The memory-ops panel showing every remember, recall, and forget live, plus the cloud/local/fallback status pill.</li>
+      <li>Google OAuth login.</li>
+      <li>Bring-your-own-LLM-key at runtime, with multi-provider support: OpenAI, OpenRouter, Google Gemini, and Ollama for local models. Keys are stored encrypted at rest.</li>
+      <li>Razorpay payments for the paid tier.</li>
+      <li>Deployment on Render as a single Docker service, with FastAPI serving the Next.js static export alongside the API and WebSocket.</li>
+    </ul>
+
+    <figure class="wide" data-od-id="mid-shot">
+      <img src="assets/landing-mid.jpeg" alt="ForgetMeNot product view showing enrollment, notes, and the memory operations panel">
+      <figcaption>Enrollment and notes on the left, the memory-ops panel streaming Cognee calls on the right. The status pill above it reports cloud, local, or fallback mode.</figcaption>
+    </figure>
+  </section>
+
+  <section class="page" id="p7">
+    <p class="page-no">Page 07</p>
+    <h2>Tech stack and architecture</h2>
+    <p>The concrete pieces, named:</p>
+    <table class="specs">
+      <tr><th>Backend</th><td>Python 3.11, FastAPI on Uvicorn. A WebSocket endpoint at <code>/ws</code> drives the 2 fps recall loop; enroll, note, distill, and forget are REST endpoints with Pydantic models validating every payload.</td></tr>
+      <tr><th>Frontend</th><td>TypeScript and React on Next.js (App Router), styled with Tailwind CSS and Radix UI primitives, with face-api.js doing detection and embedding in the browser. Static-exported and served by FastAPI.</td></tr>
+      <tr><th>Memory</th><td>Cognee, one dataset per person.</td></tr>
+      <tr><th>Auth &amp; payments</th><td>Google OAuth with session cookies; Razorpay for the paid tier.</td></tr>
+      <tr><th>Deployment</th><td>One Docker image on Render. One service to deploy, one URL to demo.</td></tr>
+    </table>
+    <p>The backend is deliberately small, six modules with sharp edges:</p>
+    <table class="specs">
+      <tr><th><code>main.py</code></th><td>Wiring. Routes, WebSocket endpoint, static file serving.</td></tr>
+      <tr><th><code>memory.py</code></th><td>The only file that talks to Cognee. remember, recall, forget, the 45 s timeout, and the JSON fallback all live here.</td></tr>
+      <tr><th><code>registry.py</code></th><td>The face registry. Loads people.json, runs the euclidean match.</td></tr>
+      <tr><th><code>llm.py</code></th><td>Prompts, the one-liner synthesis, distillation, and STT via Groq.</td></tr>
+      <tr><th><code>auth.py</code></th><td>Google OAuth.</td></tr>
+      <tr><th><code>payments.py</code></th><td>Razorpay.</td></tr>
+    </table>
+    <p>The <code>memory.py</code> boundary earned its keep during the session_id pivot. Rewriting the isolation model touched one file. Nothing in the recognition loop, the UI, or the LLM layer knew anything had changed.</p>
+  </section>
+
+  <section class="page" id="p8">
+    <p class="page-no">Page 08</p>
+    <h2>What we learned</h2>
+    <p><strong>Test against the real service early.</strong> Our session_id assumption survived a week of design discussion and about twenty minutes of contact with a production Cognee Cloud tenant. Reading docs is not testing. The afternoon we spent on live verification was the highest-leverage afternoon of the project.</p>
+    <p><strong>Design for graceful degradation.</strong> The 45-second timeout and JSON fallback were built for demo insurance and turned out to be good product design. Caregiving software that hangs when the network flakes is worse than useless. The status pill keeps the degradation honest instead of silent.</p>
+    <p><strong>Keep each integration behind one module.</strong> Because <code>memory.py</code> is the only file that imports Cognee, the biggest architectural change of the project was a one-file diff. This is old advice. It is old because it works.</p>
+    <p><strong>Treat privacy as an architecture constraint, not a policy.</strong> "Faces never leave the browser" was decided before the first line of code, and it dictated the shape of everything downstream: the descriptor-only WebSocket protocol, the local registry, and the per-person dataset model that makes forget a real deletion. Bolting that on afterwards would not have been possible.</p>
+  </section>
+
+  <section class="page" id="p9">
+    <p class="page-no">Page 09</p>
+    <h2>Where this is headed: smart glasses</h2>
+    <p>The tablet on the sideboard is the version we could build in a hackathon. The version we are building toward is glasses. Meta Ray-Ban first, because it already pairs the two things we need: a camera facing the room and an open-ear speaker next to the wearer.</p>
+    <p>The architecture was shaped for this from the start, even if we did not say so on page 3. The client's job is deliberately tiny: capture frames, embed them locally, open a WebSocket. Only the 128-float descriptor ever leaves the device. Any wearable with a camera and a network connection can play that role; nothing in the backend knows or cares whether the frames came from a laptop webcam or a pair of glasses.</p>
+    <p>What changes on glasses is the output. A card anchored to a face makes no sense when the display is your own eyes, so the reminder becomes audio-first: the same LLM one-liner, spoken quietly through the open-ear speaker as the person approaches. The recall loop, the per-person cache, and the distill pipeline all carry over unchanged, and Cognee stays the memory layer regardless of which device is wearing it.</p>
+  </section>
+
+  <section class="page" id="p10">
+    <p class="page-no">Page 10</p>
+    <h2>Credits and thanks</h2>
+    <p>Thanks to the <a href="https://github.com/topoteretes/cognee">Cognee</a> team for the memory engine this product stands on. The dataset model gave us per-person isolation and honest deletion, self_improvement gave us enrichment for free, and recall quality is what makes the reminder cards worth reading. The open source repo and the cloud tenant both held up under a hackathon's worth of abuse.</p>
+    <p>Thanks to WeMakeDevs for running the hackathon that pushed this from an idea we kept talking about into a thing that works.</p>
+    <p>And thanks to the projects we built on: face-api.js for making in-browser face embedding a two-day integration instead of a research project, FastAPI for the cleanest WebSocket ergonomics in Python, and Next.js for a frontend we could export statically and serve from the same container as the API.</p>
+    <p>ForgetMeNot exists because the memory layer already did. We wrote the loop around it.</p>
+  </section>
+
+  <div class="author">
+    <div class="avatar" aria-hidden="true">FM</div>
+    <div>
+      <p class="who">The ForgetMeNot team</p>
+      <p>We build software for the moments memory fails. ForgetMeNot was written for the WeMakeDevs hackathon on top of Cognee, FastAPI, and Next.js, and tested on our own families first.</p>
+    </div>
+  </div>
+
+</article>
+
+<div class="related" data-od-id="related">
+  <div class="related-inner">
+    <h4>Related posts</h4>
+    <div class="cards">
+      <a class="card" href="#top">
+        <div class="thumb"></div>
+        <p class="t">Running face-api.js at 2 fps without melting a laptop</p>
+        <p class="x">Detection loop budgeting, descriptor batching, and why we stopped at 2 frames per second.</p>
+        <p class="d">Coming soon</p>
+      </a>
+      <a class="card" href="#top">
+        <div class="thumb"></div>
+        <p class="t">One Docker image, whole product: FastAPI serving a Next.js export</p>
+        <p class="x">The single-service Render deployment, and the tradeoffs versus splitting frontend and backend.</p>
+        <p class="d">Coming soon</p>
+      </a>
+      <a class="card" href="#top">
+        <div class="thumb"></div>
+        <p class="t">Designing forget(): deletion as a product feature</p>
+        <p class="x">What "we deleted your data" should actually mean, and how per-person datasets make it checkable.</p>
+        <p class="d">Coming soon</p>
+      </a>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
