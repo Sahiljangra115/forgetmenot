@@ -49,7 +49,8 @@ export default function LoginPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const dest = params.get("redirect");
-      if (dest) {
+      // Only same-origin relative paths, reject "//evil.com" and "/\evil.com" too.
+      if (dest && dest.startsWith("/") && !dest.startsWith("//") && !dest.startsWith("/\\")) {
         setRedirectTarget(dest);
       }
     }

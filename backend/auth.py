@@ -173,7 +173,14 @@ def public(user: dict) -> dict:
 from cryptography.fernet import Fernet
 import base64
 
-_secret = os.getenv("SECRET_KEY", "forgetmenot_default_secret_key_12345")
+_WEAK_DEFAULT = "forgetmenot_default_secret_key_12345"
+_secret = os.getenv("LLM_ENCRYPTION_KEY") or os.getenv("SECRET_KEY")
+if not _secret or _secret == _WEAK_DEFAULT:
+    raise RuntimeError(
+        "LLM_ENCRYPTION_KEY (or SECRET_KEY) must be set to a strong random "
+        "value before storing encrypted API keys. Generate one with: "
+        "python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
 _key_bytes = hashlib.sha256(_secret.encode()).digest()
 _fernet_key = base64.urlsafe_b64encode(_key_bytes)
 _cipher = Fernet(_fernet_key)

@@ -5,6 +5,8 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     envVars:
+      - key: LLM_ENCRYPTION_KEY
+        generateValue: true
       - key: COGNEE_BASE_URL
         sync: false
       - key: COGNEE_API_KEY
