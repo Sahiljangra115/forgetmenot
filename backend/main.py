@@ -184,7 +184,7 @@ async def transcribe(request: Request, person_id: str = Form(...), audio: Upload
     text = await llm.transcribe(data, audio.filename or "clip.webm", user_id=user_id)
     if not text:
         return JSONResponse(
-            {"error": "transcription unavailable (no OPENAI_API_KEY, or empty audio)"},
+            {"error": "transcription unavailable (no GROQ_API_KEY/OPENAI_API_KEY, or empty audio)"},
             status_code=422,
         )
     await _record_observation(person, text)

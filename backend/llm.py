@@ -132,33 +132,82 @@ def _model(user_id: str | None) -> str:
     return _config_for(user_id).get("model", "gpt-4o-mini")
 
 
+def _stt_provider() -> str:
+    """Which STT backend to use: groq (free, hosted) / openai (paid) / local (free, offline, CPU)."""
+    explicit = os.getenv("STT_PROVIDER")
+    if explicit:
+        return explicit
+    if os.getenv("GROQ_API_KEY"):
+        return "groq"
+    if os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY"):
+        return "openai"
+    return "local"
+
+
 def _stt_model() -> str:
-    """Get STT model (OpenAI Whisper only)."""
-    return os.getenv("STT_MODEL", "whisper-1")
+    """Get STT model name for the active provider."""
+    defaults = {"groq": "whisper-large-v3", "openai": "whisper-1", "local": "base"}
+    return os.getenv("STT_MODEL", defaults.get(_stt_provider(), "whisper-1"))
+
+
+_stt_client = None
+_local_whisper = None
+
+
+def _get_stt_client():
+    """Hosted STT client (Groq or OpenAI), OpenAI-SDK compatible."""
+    global _stt_client
+    if _stt_client is not None:
+        return _stt_client
+
+    from openai import AsyncOpenAI
+
+    provider = _stt_provider()
+    if provider == "groq":
+        _stt_client = AsyncOpenAI(api_key=os.getenv("GROQ_API_KEY"), base_url="https://api.groq.com/openai/v1")
+    elif provider == "openai":
+        _stt_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY"))
+    return _stt_client
+
+
+def _get_local_whisper():
+    """Local, offline, free STT via faster-whisper. No API key, runs on CPU."""
+    global _local_whisper
+    if _local_whisper is None:
+        from faster_whisper import WhisperModel
+        _local_whisper = WhisperModel(_stt_model(), device="cpu", compute_type="int8")
+    return _local_whisper
 
 
 async def transcribe(audio_bytes: bytes, filename: str = "clip.webm", user_id: str | None = None) -> str | None:
-    """Transcribe audio. Only works with OpenAI provider."""
+    """Transcribe audio. STT_PROVIDER=groq (free, hosted, default if GROQ_API_KEY set) /
+    openai (paid) / local (free, offline faster-whisper, no key, needs CPU)."""
     if not audio_bytes:
         return None
 
-    provider = _config_for(user_id).get("provider", "openai")
-    if provider != "openai":
-        print(f"[llm] transcription not supported for {provider}")
-        return None
+    provider = _stt_provider()
 
-    client = _get(user_id)
-    if client is None:
-        return None
-    
     try:
+        if provider == "local":
+            import asyncio
+            model = _get_local_whisper()
+            buf = io.BytesIO(audio_bytes)
+            buf.name = filename
+            segments, _ = await asyncio.to_thread(model.transcribe, buf)
+            text = " ".join(seg.text for seg in segments).strip()
+            return text or None
+
+        client = _get_stt_client()
+        if client is None:
+            print(f"[llm] transcription unavailable: no key for provider {provider}")
+            return None
         buf = io.BytesIO(audio_bytes)
         buf.name = filename
         r = await client.audio.transcriptions.create(model=_stt_model(), file=buf)
         text = (r.text or "").strip()
         return text or None
     except Exception as e:
-        print(f"[llm] transcribe failed: {e}")
+        print(f"[llm] transcribe failed ({provider}): {e}")
         return None
 
 

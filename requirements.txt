@@ -8,3 +8,4 @@ razorpay
 httpx
 pydantic
 cryptography
+faster-whisper

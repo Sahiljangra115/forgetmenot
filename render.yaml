@@ -11,11 +11,21 @@ services:
         sync: false
       - key: COGNEE_API_KEY
         sync: false
+      - key: LLM_PROVIDER
+        sync: false
       - key: LLM_API_KEY
         sync: false
       - key: LLM_BASE_URL
         sync: false
       - key: SUMMARY_MODEL
+        sync: false
+      - key: STT_PROVIDER
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: STT_MODEL
         sync: false
       - key: RAZORPAY_KEY_ID
         sync: false
