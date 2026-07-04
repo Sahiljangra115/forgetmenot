@@ -112,9 +112,9 @@ def _get(user_id: str | None = None):
             client = AsyncOpenAI(api_key=key, base_url=base_url)
             print(f"[llm] using {provider} at {base_url}, model={model}")
         elif provider == "google":
-            import anthropic
-            client = anthropic.AsyncAnthropic(api_key=key)
-            print(f"[llm] using Google Gemini via Anthropic SDK, model={model}")
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+            print(f"[llm] using Google Gemini via OpenAI-compatible endpoint, model={model}")
         else:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=key, base_url=base_url) if base_url else AsyncOpenAI(api_key=key)

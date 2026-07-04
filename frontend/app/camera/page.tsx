@@ -137,29 +137,20 @@ export default function CameraPage() {
       return process.env.NEXT_PUBLIC_BACKEND_URL.replace(/\/$/, "");
     }
     if (typeof window === "undefined") return "";
-    const protocol = window.location.protocol;
-    const host = window.location.hostname;
-    const port = 8000;
-    return `${protocol}//${host}:${port}`;
+    return window.location.port === "3000" ? "http://localhost:8000" : "";
   };
 
   const getWsUrl = () => {
-    if (process.env.NEXT_PUBLIC_BACKEND_URL) {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL.replace(/\/$/, "");
-      const wsProto = backendUrl.startsWith("https") ? "wss" : "ws";
-      try {
-        const url = new URL(backendUrl);
-        return `${wsProto}://${url.host}/ws`;
-      } catch (e) {
-        // Fallback if not a valid URL
-        return `${wsProto}://${backendUrl.replace(/^https?:\/\//, "")}/ws`;
-      }
-    }
     if (typeof window === "undefined") return "";
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const host = window.location.hostname;
-    const port = 8000;
-    return `${proto}://${host}:${port}/ws`;
+    const backendUrl = getBackendUrl();
+    const wsProto = window.location.protocol === "https:" ? "wss" : "ws";
+    if (!backendUrl) return `${wsProto}://${window.location.host}/ws`;
+    try {
+      const url = new URL(backendUrl);
+      return `${wsProto}://${url.host}/ws`;
+    } catch (e) {
+      return `${wsProto}://${backendUrl.replace(/^https?:\/\//, "")}/ws`;
+    }
   };
 
   const addLog = (message: string, kind: "info" | "warn" | "err" | "match" = "info") => {

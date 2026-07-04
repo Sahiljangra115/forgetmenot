@@ -33,11 +33,12 @@ def _save() -> None:
     REG_FILE.write_text(json.dumps(_state, indent=2))
 
 
-def add_person(name: str, relation: str, descriptor: list[float]) -> dict:
+def add_person(name: str, relation: str, descriptor: list[float], user_id: str) -> dict:
     pid = "p_" + uuid.uuid4().hex[:8]
     with _lock:
         _state["people"][pid] = {
             "id": pid,
+            "user_id": user_id,
             "name": name,
             "relation": relation,
             "descriptors": [descriptor],
@@ -68,25 +69,29 @@ def clear_notes(pid: str) -> None:
             _save()
 
 
-def remove_person(pid: str) -> bool:
+def remove_person(pid: str, user_id: str) -> bool:
     with _lock:
-        if pid in _state["people"]:
+        p = _state["people"].get(pid)
+        if p and p.get("user_id") == user_id:
             del _state["people"][pid]
             _save()
             return True
         return False
 
 
-def get(pid: str) -> dict | None:
+def get(pid: str, user_id: str) -> dict | None:
     p = _state["people"].get(pid)
-    return dict(p) if p else None
+    if not p or p.get("user_id") != user_id:
+        return None
+    return dict(p)
 
 
-def list_people() -> list[dict]:
+def list_people(user_id: str) -> list[dict]:
     return [
         {"id": p["id"], "name": p["name"], "relation": p["relation"],
          "note_count": len(p["notes"])}
         for p in _state["people"].values()
+        if p.get("user_id") == user_id
     ]
 
 
@@ -94,11 +99,13 @@ def _euclid(a: list[float], b: list[float]) -> float:
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
-def match(descriptor: list[float], threshold: float) -> tuple[dict | None, float]:
-    """Return the closest enrolled person and its distance, or None if too far."""
+def match(descriptor: list[float], threshold: float, user_id: str) -> tuple[dict | None, float]:
+    """Return the closest enrolled person (scoped to user_id) and its distance, or None if too far."""
     best: dict | None = None
     best_d = float("inf")
     for p in _state["people"].values():
+        if p.get("user_id") != user_id:
+            continue
         for d in p["descriptors"]:
             if len(d) != len(descriptor):
                 continue

@@ -49,9 +49,10 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="ForgetMeNot", lifespan=lifespan)
 
 from fastapi.middleware.cors import CORSMiddleware
+_cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -139,15 +140,21 @@ async def status():
 
 
 @app.get("/api/people")
-async def people():
-    return {"people": registry.list_people()}
+async def people(request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse({"error": "not signed in"}, status_code=401)
+    return {"people": registry.list_people(user["id"])}
 
 
 @app.post("/api/enroll")
-async def enroll(body: EnrollBody):
+async def enroll(body: EnrollBody, request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse({"error": "not signed in"}, status_code=401)
     if len(body.descriptor) != 128:
         return JSONResponse({"error": "descriptor must be 128 floats"}, status_code=400)
-    person = registry.add_person(body.name.strip(), body.relation.strip(), body.descriptor)
+    person = registry.add_person(body.name.strip(), body.relation.strip(), body.descriptor, user["id"])
     if body.seed and body.seed.strip():
         fact = f"About {person['name']} ({person['relation']}): {body.seed.strip()}"
         await memory.remember(fact, session_id=person["id"])
@@ -157,15 +164,18 @@ async def enroll(body: EnrollBody):
 
 
 @app.post("/api/note")
-async def note(body: NoteBody):
-    person = registry.get(body.person_id)
+async def note(body: NoteBody, request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse({"error": "not signed in"}, status_code=401)
+    person = registry.get(body.person_id, user["id"])
     if not person:
         return JSONResponse({"error": "unknown person"}, status_code=404)
     text = body.text.strip()
     if not text:
         return JSONResponse({"error": "empty note"}, status_code=400)
     await _record_observation(person, text)
-    return {"ok": True, "note_count": len(registry.get(person["id"])["notes"])}
+    return {"ok": True, "note_count": len(registry.get(person["id"], user["id"])["notes"])}
 
 
 @app.post("/api/transcribe")
@@ -176,12 +186,13 @@ async def transcribe(request: Request, person_id: str = Form(...), audio: Upload
     matched, which is the plan's explicit stand-in for speaker separation.
     """
     user = _current_user(request)
-    user_id = user["id"] if user else None
-    person = registry.get(person_id)
+    if not user:
+        return JSONResponse({"error": "not signed in"}, status_code=401)
+    person = registry.get(person_id, user["id"])
     if not person:
         return JSONResponse({"error": "unknown person"}, status_code=404)
     data = await audio.read()
-    text = await llm.transcribe(data, audio.filename or "clip.webm", user_id=user_id)
+    text = await llm.transcribe(data, audio.filename or "clip.webm", user_id=user["id"])
     if not text:
         return JSONResponse(
             {"error": "transcription unavailable (no GROQ_API_KEY/OPENAI_API_KEY, or empty audio)"},
@@ -189,7 +200,7 @@ async def transcribe(request: Request, person_id: str = Form(...), audio: Upload
         )
     await _record_observation(person, text)
     return {"ok": True, "transcript": text,
-            "note_count": len(registry.get(person["id"])["notes"])}
+            "note_count": len(registry.get(person["id"], user["id"])["notes"])}
 
 
 @app.get("/api/conversation/summary")
@@ -197,16 +208,20 @@ async def conversation_summary(person_id: str, request: Request):
     """Short summary + bullets from a person's pending session notes, for the
     live 'view more details' card on the demo page."""
     user = _current_user(request)
-    user_id = user["id"] if user else None
-    person = registry.get(person_id)
+    if not user:
+        return JSONResponse({"error": "not signed in"}, status_code=401)
+    person = registry.get(person_id, user["id"])
     if not person:
         return JSONResponse({"error": "unknown person"}, status_code=404)
-    result = await llm.summarize_conversation(person, person.get("notes", []), user_id=user_id)
+    result = await llm.summarize_conversation(person, person.get("notes", []), user_id=user["id"])
     return result
 
 
 @app.post("/api/threshold")
-async def set_threshold(body: ThresholdBody):
+async def set_threshold(body: ThresholdBody, request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse({"error": "not signed in"}, status_code=401)
     global MATCH_THRESHOLD
     MATCH_THRESHOLD = max(0.2, min(1.0, body.value))
     return {"threshold": MATCH_THRESHOLD}
@@ -216,28 +231,32 @@ async def set_threshold(body: ThresholdBody):
 async def distill(body: DistillBody, request: Request):
     """Promote a person's raw session notes into one durable graph fact."""
     user = _current_user(request)
-    user_id = user["id"] if user else None
-    person = registry.get(body.person_id)
+    if not user:
+        return JSONResponse({"error": "not signed in"}, status_code=401)
+    person = registry.get(body.person_id, user["id"])
     if not person:
         return JSONResponse({"error": "unknown person"}, status_code=404)
-    fact = await llm.distill(person, person.get("notes", []), user_id=user_id)
+    fact = await llm.distill(person, person.get("notes", []), user_id=user["id"])
     if not fact:
         return JSONResponse({"error": "no notes to distill"}, status_code=400)
     await memory.remember(fact, session_id=person["id"])
     await memory.improve(person["id"])
     registry.clear_notes(person["id"])
     _invalidate(person["id"])
-    summary = await _recall_reminder(person, user_id=user_id)
+    summary = await _recall_reminder(person, user_id=user["id"])
     return {"ok": True, "distilled": fact, "reminder": summary}
 
 
 @app.post("/api/forget/{person_id}")
-async def forget_person(person_id: str):
-    person = registry.get(person_id)
+async def forget_person(person_id: str, request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse({"error": "not signed in"}, status_code=401)
+    person = registry.get(person_id, user["id"])
     if not person:
         return JSONResponse({"error": "unknown person"}, status_code=404)
     await memory.forget(dataset=person_id)
-    registry.remove_person(person_id)
+    registry.remove_person(person_id, user["id"])
     _invalidate(person_id)
     return {"ok": True, "forgotten": person_id}
 
@@ -252,7 +271,10 @@ async def ws(websocket: WebSocket):
     await websocket.accept()
     token = websocket.cookies.get(auth.SESSION_COOKIE)
     user = auth.resolve_session(token)
-    user_id = user["id"] if user else None
+    if not user:
+        await websocket.close(code=4401)
+        return
+    user_id = user["id"]
     try:
         while True:
             msg = await websocket.receive_json()
@@ -262,9 +284,10 @@ async def ws(websocket: WebSocket):
             if not isinstance(descriptor, list) or len(descriptor) != 128:
                 await websocket.send_json({"type": "none"})
                 continue
-            person, dist = registry.match(descriptor, MATCH_THRESHOLD)
+            person, dist = registry.match(descriptor, MATCH_THRESHOLD, user_id)
             if person is None:
-                await websocket.send_json({"type": "none", "distance": round(dist, 3)})
+                distance = round(dist, 3) if dist != float("inf") else None
+                await websocket.send_json({"type": "none", "distance": distance})
                 continue
             pid = person["id"]
             # Face match is local and instant; recall+LLM are the slow part.
@@ -402,8 +425,14 @@ async def payments_verify(body: VerifyPaymentBody, request: Request):
     # only a verified signature marks the account as paid.
     if not ok:
         return JSONResponse({"error": "signature verification failed"}, status_code=400)
-    auth.set_plan(user["id"], body.plan)
-    return {"ok": True, "plan": body.plan}
+    # Plan comes from the order Razorpay recorded at creation time, not the
+    # client-supplied body.plan, so a valid signature can't be replayed to
+    # upgrade to a different (unpaid) plan.
+    plan = payments.order_plan(body.order_id)
+    if not plan:
+        return JSONResponse({"error": "could not resolve plan for this order"}, status_code=400)
+    auth.set_plan(user["id"], plan)
+    return {"ok": True, "plan": plan}
 
 
 @app.post("/api/llm/config")

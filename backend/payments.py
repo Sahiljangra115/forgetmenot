@@ -90,3 +90,13 @@ def verify_payment(order_id: str, payment_id: str, signature: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def order_plan(order_id: str) -> str | None:
+    """Look up the plan actually recorded on the order at creation time, so a
+    signature-valid payment can't be replayed against a different plan."""
+    client = _get_client()
+    if client is None:
+        raise NotConfiguredError("Razorpay is not configured.")
+    order = client.order.fetch(order_id)
+    return order.get("notes", {}).get("plan")

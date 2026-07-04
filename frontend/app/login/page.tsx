@@ -34,10 +34,7 @@ export default function LoginPage() {
       return process.env.NEXT_PUBLIC_BACKEND_URL.replace(/\/$/, "");
     }
     if (typeof window === "undefined") return "";
-    const protocol = window.location.protocol;
-    const host = window.location.hostname;
-    const port = 8000;
-    return `${protocol}//${host}:${port}`;
+    return window.location.port === "3000" ? "http://localhost:8000" : "";
   };
 
   useEffect(() => {
