@@ -69,8 +69,13 @@ export function Navigation() {
             <a href="https://github.com/Sahiljangra115/forgetmenot" className={`transition-all duration-500 ${isScrolled ? "text-xs text-foreground/70 hover:text-foreground" : "text-sm text-white/70 hover:text-white"}`}>
               View Code
             </a>
-            <Link href="/login" className={`transition-all duration-500 ${isScrolled ? "text-xs text-foreground/70 hover:text-foreground" : "text-sm text-white/70 hover:text-white"}`}>
-              Log in
+            <Link href="/login">
+              <Button
+                size="sm"
+                className={`rounded-full transition-all duration-500 ${isScrolled ? "bg-foreground hover:bg-foreground/90 text-background px-4 h-8 text-xs" : "bg-white hover:bg-white/90 text-black px-6"}`}
+              >
+                Log in
+              </Button>
             </Link>
             <Link href="/login?redirect=/camera">
               <Button
